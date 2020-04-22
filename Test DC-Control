@@ -1,0 +1,97 @@
+# Test-Programm für die BCM-Ausgänge(23,24,25)
+# Einlesen einer analogen Spannung mit MCP3008, Kanal 1, Pi 4 B .
+# Um einen DC-Motor zu steuern, wird über Pin 23
+# der Motor aktiviert (EN1), IN1 und IN2 bestimmen jeweils die Richtung.
+# Wenn ich die Signale Pin 23 - 25 mit LEDs kontrolliere,
+# zeigt IN2 richtig High an, EN1 aber nur High mit kurzen Pulsen.
+# Die Signale für den Rückwärtslauf sind richtig.
+# Drehe ich die Reihenfolge Vorwärtslauf, Rückwärtslauf im Programm um,
+# - also erst reverse, dann forward - funktionieren die Signale für
+# Vorwärtslauf. und nicht mehr für Rückwärtslauf.
+
+# Was ist falsch? Sind die GPIOs durch das adafruit-Programm
+# beeinflusst? Aber warum dann nur im ersten Aufruf (forward)
+# und nicht im zweiten Aufruf (reverse)? Es kommt auf die
+# die Positione der beiden if-Schleifen im Programm an.
+
+# Wer weiß einen Ausweg?
+
+import time
+import busio
+import digitalio
+import board
+import adafruit_mcp3xxx.mcp3008 as MCP
+from adafruit_mcp3xxx.analog_in import AnalogIn
+
+import RPi.GPIO as GPIO
+GPIO.cleanup()
+GPIO.setmode(GPIO.BCM)
+
+DEBUG = 1
+
+Motor1 = 2
+GPIO.setup(Motor1, GPIO.OUT)
+
+p = GPIO.PWM(Motor1, 1000)
+p.start(100)
+
+Mot1EN1 = 23
+Mot1IN1 = 24
+Mot1IN2 = 25
+GPIO.setup(Mot1EN1, GPIO.OUT)
+GPIO.setup(Mot1IN1, GPIO.OUT)
+GPIO.setup(Mot1IN2, GPIO.OUT)
+
+fw = 5
+bw = 6
+GPIO.setup(fw,GPIO.IN)
+GPIO.setup(bw,GPIO.IN)
+    
+def reverse():
+    GPIO.output(Mot1EN1, GPIO.HIGH)
+    GPIO.output(Mot1IN1, GPIO.HIGH)
+    GPIO.output(Mot1IN2, GPIO.LOW)
+    print('Rückwärtslauf')
+
+def forward():
+    GPIO.output(Mot1EN1, GPIO.HIGH)
+    GPIO.output(Mot1IN1, GPIO.LOW)
+    GPIO.output(Mot1IN2, GPIO.HIGH)
+    print('Vorwärtslauf')
+    
+# create the spi bus
+spi = busio.SPI(clock=board.SCK, MISO=board.MISO, MOSI=board.MOSI)
+
+# create the cs (chip select)
+cs = digitalio.DigitalInOut(board.D22)
+
+# create the mcp object
+mcp = MCP.MCP3008(spi, cs)
+
+for i in range(2000):
+    
+    # create an analog input channel on pin 1
+    chan1 = AnalogIn(mcp, MCP.P1)
+
+    if DEBUG == 1:
+        print('Raw ADC Value: ', chan1.value)
+        print('ADC Voltage: ' + str(chan1.voltage) + 'V')
+ 
+    trim_pot = chan1.value 
+    Duty = trim_pot * 100/65535    
+    p.ChangeDutyCycle(Duty)
+    
+    if GPIO.input(fw) == GPIO.HIGH:
+        forward()
+    else:
+        GPIO.output(Mot1EN1, GPIO.LOW)
+
+    if GPIO.input(bw) == GPIO.HIGH:
+        reverse()
+    else:
+        GPIO.output(Mot1EN1, GPIO.LOW)
+                        
+time.sleep(1)
+GPIO.cleanup()
+
+
